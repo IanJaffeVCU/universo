@@ -139,16 +139,16 @@ if __name__ == "__main__":
 
     #Front, Bottom, Inner, Top
     #Name, Pin, Number of LEDs
-    LED_Strips = [  LED_Strip('Front'   , board.D18, 120), 
-                    LED_Strip('Inner'   , board.D19, 120),
-                    LED_Strip('Top'     , board.D20, 120),
-                    LED_Strip('Bottom'  , board.D21, 120)]
+    LED_Strips = [  LED_Strip('Top'   , board.D18, 104), #pin 12 GPIO 18
+                    LED_Strip('Front'   , board.D21, 120)] #pin 40 GPIO 21
+                    #LED_Strip('Inner'     , board.D24, 120)]#,
+                    #LED_Strip('Bottom'  , board.D27, 120)]
     
     #y, Frontside, Leftside, Backside, Rightside
-    LED_Strips[0].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
+    LED_Strips[0].Setup_Virtual_Points(15, [-13,14], [-13,13], [-13,13], [-13,13])
     LED_Strips[1].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
-    LED_Strips[2].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
-    LED_Strips[3].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
+    #LED_Strips[2].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
+    #LED_Strips[3].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
 
     '''
     Setting Up Virtual Points
@@ -194,5 +194,3 @@ if __name__ == "__main__":
 
         for LED_Strip in LED_Strips:
             LED_Strip.RotationOfPoints(angle_x, angle_y, angle_z, Uy)
-        
-
