@@ -14,8 +14,25 @@ import neopixel
 import socket
 import math
 
-class LED_Strip:
+import itertools
+import threading
+from multiprocessing import Pipe
+from random import randint
+
+class DeadLock(threading.thread):
+    def __int__(self):
+        self.Lock = True
+    
+    def Acquire(self, Count = 1):
+        if self.Lock:
+            self.Lock = False
+        else:
+            time.sleep(randint(1,100)/10)
+
+class LED_Strip(threading.Thread):
+    id_iter = itertools.count()
     def __init__(self, Name, pixel_pin, num_pixels):
+        self.id = next(self.id_iter)
         self.Name = Name
         self.pixel_pin = pixel_pin
         self.num_pixels = num_pixels
