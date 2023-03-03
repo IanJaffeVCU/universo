@@ -14,26 +14,15 @@ import neopixel
 import socket
 import math
 
-import itertools
-import threading
+from threading import Thread
 from multiprocessing import Pipe
-from random import randint
 
-class DeadLock(threading.thread):
-    def __int__(self):
-        self.Lock = True
-    
-    def Acquire(self, Count = 1):
-        if self.Lock:
-            self.Lock = False
-        else:
-            time.sleep(randint(1,100)/10)
-
-class LED_Strip(threading.Thread):
-    id_iter = itertools.count()
-    def __init__(self, Name, pixel_pin, num_pixels):
-        self.id = next(self.id_iter)
+class LED_Strip(Thread):
+    Running = True
+    def __init__(self, Name, Child, pixel_pin, num_pixels):
+        super().__init__()
         self.Name = Name
+        self.Child = Child
         self.pixel_pin = pixel_pin
         self.num_pixels = num_pixels
 
@@ -51,10 +40,9 @@ class LED_Strip(threading.Thread):
                                   [0, 1, 0],
                                   [0, 0, 0]]
     
-    def Setup_Virtual_Points(self, y, Frontside, Leftside, Backside, Rightside): #Decide how to deal with range
+    def Setup_Virtual_Points(self, input): #Decide how to deal with range
+        y, Frontside, Leftside, Backside, Rightside = input
         # Front side
-        #y = 15
-        #for x in range(-15, 16):
         for x in range(Frontside[0], Frontside[1]):
             if y == -1:
                 y = y + self.num_pixels
@@ -63,24 +51,22 @@ class LED_Strip(threading.Thread):
 
         # Left Side
         y = 15
-        #for x in range(-15, 15):
         for x in range(Leftside[0], Leftside[1]):
             self.cube_points[y] = [[-1], [0], [x * -((1 / (self.num_pixels/4)) * 2)]]
             y = y + 1
 
         #Backside
-        #for x in range(-15, 15):
         for x in range(Backside[0], Backside[1]):
             self.cube_points[y] = [[x * ((1 / (self.num_pixels/4)) * 2)], [0], [-1]]
             y = y + 1
 
         #Rightside
-        #for x in range(-15, 15):
         for x in range(Rightside[0], Rightside[1]):
             self.cube_points[y] = [[1], [0], [x * ((1 / (self.num_pixels/4)) * 2)]]
             y = y + 1
     
-    def RotationOfPoints(self, angle_x, angle_y, angle_z, Uy):
+    def RotationOfPoints(self, input):
+        angle_x, angle_y, angle_z, Uy = input
         rotation_x = [[1, 0, 0],
                       [0, cos(angle_x), -sin(angle_x)],
                       [0, sin(angle_x), cos(angle_x)]]
@@ -118,8 +104,17 @@ class LED_Strip(threading.Thread):
 
             self.pixels[i] = (255 - int(Color), 70, int(Color))
             i += 1
-        time.sleep(.02)
-        self.pixels.show()
+    
+    def run(self):
+        self.Setup_Virtual_Points(self.Child.recv())
+        self.Child.send(True)
+        
+        while self.Running:
+            self.RotationOfPoints(self.Child.recv())
+            self.Child.send(True)
+
+        super().run()
+
 
 
 # Matrix multiplication function
@@ -153,19 +148,31 @@ if __name__ == "__main__":
     '''
     Setting up NeoPixels
     '''
-
+    Pipes = [Pipe() for k in range (2)] # in, out = Pipe
+    Parent = [k[0] for k in Pipes]
     #Front, Bottom, Inner, Top
     #Name, Pin, Number of LEDs
-    LED_Strips = [  LED_Strip('Top'   , board.D18, 104), #pin 12 GPIO 18
-                    LED_Strip('Front'   , board.D21, 120)] #pin 40 GPIO 21
-                    #LED_Strip('Inner'     , board.D24, 120)]#,
-                    #LED_Strip('Bottom'  , board.D27, 120)]
+    LED_Strips = [  LED_Strip('Top',    Pipes[0][1], board.D18, 104), #pin 12 GPIO 18
+                    LED_Strip('Front',  Pipes[1][1], board.D21, 120)] #pin 40 GPIO 21
+                    #LED_Strip('Inner', Pipes[2][1], board.D24, 120)]#,
+                    #LED_Strip('Bottom',Pipes[3][1], board.D27, 120)]
     
+    threads= []
     #y, Frontside, Leftside, Backside, Rightside
-    LED_Strips[0].Setup_Virtual_Points(15, [-13,14], [-13,13], [-13,13], [-13,13])
-    LED_Strips[1].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
+    #LED_Strips[0].Setup_Virtual_Points(15, [-13,14], [-13,13], [-13,13], [-13,13])
+    #LED_Strips[1].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
     #LED_Strips[2].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
     #LED_Strips[3].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
+    Points = []
+    Points.append([15, [-13,14], [-13,13], [-13,13], [-13,13]])
+    Points.append([15, [-15,16], [-15,15], [-15,15], [-15,15]])
+    for i in range(len(LED_Strips)):
+        LED_Strips[i].start()
+        Parent[i].send(Points[i])
+    
+    for p in Parent:
+        if p.recv:
+            print('Points Setup Succesful')
 
     '''
     Setting Up Virtual Points
@@ -209,5 +216,14 @@ if __name__ == "__main__":
         TODO!!!
         '''
 
-        for LED_Strip in LED_Strips:
-            LED_Strip.RotationOfPoints(angle_x, angle_y, angle_z, Uy)
+        for p in Parent:
+            p.send(angle_x, angle_y, angle_z, Uy)
+        
+        for p in Parent:
+            if p.recv():
+                print("Points updated")
+        
+        for LEDStrip in LED_Strips:
+            LEDStrip.pixels.show()
+        
+
