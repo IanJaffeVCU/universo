@@ -112,6 +112,10 @@ class LED_Strip(Thread):
         while self.Running:
             self.RotationOfPoints(self.Child.recv())
             self.Child.send(True)
+            if (self.Child.recv()):
+                self.Child.send(True)
+            else:
+                break
 
         super().run()
 
@@ -223,7 +227,10 @@ if __name__ == "__main__":
             if p.recv():
                 print("Points updated")
         
-        for LEDStrip in LED_Strips:
-            LEDStrip.pixels.show()
+        for p in Parent:
+            p.send(True)
+            if p.recv():
+                print("LED Updated")
+            
         
 
