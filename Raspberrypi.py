@@ -9,7 +9,6 @@ of a game object within unity using UDP sockets
 
 from math import *
 import board
-import time
 import neopixel
 import socket
 import math
@@ -17,7 +16,7 @@ import numpy
 
 from threading import Thread
 from multiprocessing import Pipe
-from functools import lru_cache
+#from numba import jit
 
 
 #dev = False
@@ -35,7 +34,7 @@ class LED_Strip(Thread):
             self.pixel_pin, self.num_pixels, brightness=100, auto_write=False, pixel_order=neopixel.GRB
         )
 
-        #self.pixels.fill((0, 255, 0))
+        self.pixels.fill((0, 255, 0))
         #self.pixels.show()
 
         # Setting points
@@ -73,8 +72,8 @@ class LED_Strip(Thread):
             self.cube_points[y] = [[1], [0], [x * ((1 / (self.num_pixels/4)) * 2)]]
             y = y + 1
     
+    #@jit(nopython=True)
     def RotationOfPoints(self, input):
-        start = time.clock()
         #if dev:
         #    print("Updating points for " + self.Name)
         angle_x, angle_y, angle_z, Uy = input
@@ -124,11 +123,10 @@ class LED_Strip(Thread):
                 print(e)
                 #if dev:
                 #    print(e)
-        end = time.clock()
-        print("Time for " + self.name + " is " + str((end-start)/1000))
     def run(self):
         self.Setup_Virtual_Points(self.Child.recv())
         self.Child.send(self.Name)
+        self.pixels.show()
         
         while self.Running:
             self.RotationOfPoints(self.Child.recv())
@@ -137,25 +135,6 @@ class LED_Strip(Thread):
             self.Child.send(True)
 
         super().run()
-
-
-
-# Matrix multiplication function
-
-def multiply_m(a, b):
-    a_rows = len(a)
-    #a_cols = len(a[0])
-    b_rows = len(b)
-    b_cols = len(b[0])
-    # Dot product matrix dimensions = a_rows x b_cols
-    product = [[0 for _ in range(b_cols)] for _ in range(a_rows)]
-
-    for i in range(a_rows):
-        for j in range(b_cols):
-            for k in range(b_rows):
-                product[i][j] += a[i][k] * b[k][j]
-
-    return product
 
 if __name__ == "__main__":
     '''
@@ -178,13 +157,13 @@ if __name__ == "__main__":
     #Name, Pin, Number of LEDs
     LED_Strips = [  LED_Strip('Top/Bottom',    Pipes[0][1], board.D18, 104), #pin 12 GPIO 18
                     LED_Strip('Front',  Pipes[1][1], board.D21, 120), #pin 40 GPIO 21
-                    LED_Strip('Inner', Pipes[2][1], board.D10, 105)]#,/
+                    LED_Strip('Inner', Pipes[2][1], board.D10, 108)]#,/
                     #LED_Strip('Bottom',Pipes[3][1], board.D27, 120)]
     
     Points = []
-    Points.append([15, [-13,14], [-13,13], [-13,13], [-13,13]])
+    Points.append([13, [-13,14], [-13,13], [-13,13], [-13,13]])
     Points.append([15, [-15,16], [-15,15], [-15,15], [-15,15]])
-    Points.append([15, [-13,14], [-13,13], [-13,13], [-13,13]])
+    Points.append([14, [-14,15], [-13,13], [-14,14], [-13,13]])
     for i in range(len(LED_Strips)):
         LED_Strips[i].start()
         Parent[i].send(Points[i])
@@ -210,7 +189,6 @@ if __name__ == "__main__":
     Main Loop
     '''
     while True:
-
         # Get values from Unity
         pac, address = sock.recvfrom(35)
         data = [float(k) for k in str(pac, 'UTF-8').split(',')]
@@ -238,12 +216,7 @@ if __name__ == "__main__":
 
         for p in Parent:
                 p.send([angle_x, angle_y, angle_z, Uy])
-        '''
-        for p in Parent:
-            if p.recv():
-                if dev:
-                    print("Points updated")
-        '''
+
         for p in Parent:
             p.send(True)
             p.recv()
