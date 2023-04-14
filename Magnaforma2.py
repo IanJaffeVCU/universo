@@ -15,21 +15,30 @@ from itertools import count as itertoolsCount
 from board import D10, D18, D21, D12
 from numpy import dot as MatrixMultiplication
 from math import radians, cos, sin
-from threading import Thread
-from multiprocessing import Pipe
+#from threading import Thread
+#from multiprocessing import Pipe
 #from numba import jit
+
+from multiprocessing import Pool, Process
+from multiprocessing.dummy import Pool as ThreadPool
 
 
 #dev = False
 
-class LED_Strip(Thread):
+#class LED_Strip(Thread):
+
+projection_matrix = [[1, 0, 0],
+                     [0, 1, 0],
+                     [0, 0, 0]]
+
+class LED_Strip():
     id_iter = itertoolsCount()
-    def __init__(self, Name, Child, Update, pixel_pin, num_pixels):
+    def __init__(self, Name, pixel_pin, num_pixels):
         super().__init__()
         self.Name = Name
         self.id = next(self.id_iter)
-        self.Child = Child
-        self.Update = Update
+        #self.Child = Child
+        #self.Update = Update
         self.pixel_pin = pixel_pin
         self.num_pixels = num_pixels
         self.Running = True
@@ -43,13 +52,8 @@ class LED_Strip(Thread):
 
         # Setting points
         self.cube_points = [n for n in range(self.num_pixels)]
-
-        self.projection_matrix = [[1, 0, 0],
-                                  [0, 1, 0],
-                                  [0, 0, 0]]
     
-    def Setup_Virtual_Points(self, input): #Decide how to deal with range
-        mid, Frontside, Leftside, Backside, Rightside = input
+    def Setup_Virtual_Points(self, mid, Frontside, Leftside, Backside, Rightside): #Decide how to deal with range
         #if dev:
         #    print("Setting up points for " + self.Name)
         # Front side
@@ -77,10 +81,7 @@ class LED_Strip(Thread):
             y = y + 1
     
     #@jit(nopython=True)
-    def RotationOfPoints(self, input):
-        #if dev:
-        #    print("Updating points for " + self.Name)
-        angle_x, angle_y, angle_z, Uy = input
+    def RotationOfPoints(self, angle_x, angle_y, angle_z, Uy):
         rotation_x = [[1, 0, 0],
                       [0, cos(angle_x), -sin(angle_x)],
                       [0, sin(angle_x), cos(angle_x)]]
@@ -98,7 +99,7 @@ class LED_Strip(Thread):
             rotate_x = MatrixMultiplication(rotation_x, point)
             rotate_y = MatrixMultiplication(rotation_y, rotate_x)
             rotate_z = MatrixMultiplication(rotation_z, rotate_y)
-            point_2d = MatrixMultiplication(self.projection_matrix, rotate_z)
+            point_2d = MatrixMultiplication(projection_matrix, rotate_z)
 
             '''
             Takes virtual plot points and combineds them with
@@ -114,8 +115,12 @@ class LED_Strip(Thread):
                 Color = 0
 
             self.pixels[i] = (255 - int(Color), 70, int(Color))
-            #except Exception as e:
-            #    print(e)
+    
+    def UpdatePixels(self, Colors):
+        for i, Color in enumerate(Colors):
+            self.pixels[i] = (255 - int(Color), 70, int(Color))
+        self.pixels.show()
+'''
     def run(self):
         self.Setup_Virtual_Points(self.Child.recv())
         #self.Child.send(self.Name)
@@ -146,6 +151,44 @@ class Update_LED(Thread):
                 #pixels = Update.recv()
                 #pixels.show()
         super().run()
+'''
+
+def RotationOfPointsStandAlone(input):
+    angle_x, angle_y, angle_z, Uy, cube_points = input
+    rotation_x = [[1, 0, 0],
+                  [0, cos(angle_x), -sin(angle_x)],
+                  [0, sin(angle_x), cos(angle_x)]]
+
+    rotation_y = [[cos(angle_y), 0, sin(angle_y)],
+                  [0, 1, 0],
+                  [-sin(angle_y), 0, cos(angle_y)]]
+
+    rotation_z = [[cos(angle_z), -sin(angle_z), 0],
+                  [sin(angle_z), cos(angle_z), 0],
+                  [0, 0, 1]]
+    Colors = []
+    for point in cube_points:
+        #try:
+        rotate_x = MatrixMultiplication(rotation_x, point)
+        rotate_y = MatrixMultiplication(rotation_y, rotate_x)
+        rotate_z = MatrixMultiplication(rotation_z, rotate_y)
+        point_2d = MatrixMultiplication(projection_matrix, rotate_z)
+
+        '''
+        Takes virtual plot points and combineds them with
+
+        must think of method of simplification ~ ** The robots' Y-axis ** ~ must think of method of simplification
+
+        '''
+
+        Color = ((point_2d[1][0] * scale) + (Uy * 1000) + 150)
+        if Color > 255:
+            Color = 255
+        elif Color < 0:
+            Color = 0
+        
+        Colors.append(Color)
+    return Colors
 
 if __name__ == "__main__":
     '''
@@ -162,25 +205,35 @@ if __name__ == "__main__":
     '''
     Setting up NeoPixels
     '''
-    LED_Pipes = [Pipe() for k in range (3)] # in, out = Pipe
-    UPDATE_Pipes = [Pipe() for k in range (len(LED_Pipes))] # in, out = Pipe
-    Parent = [k[0] for k in LED_Pipes]
+    #LED_Pipes = [Pipe() for k in range (3)] # in, out = Pipe
+    #UPDATE_Pipes = [Pipe() for k in range (len(LED_Pipes))] # in, out = Pipe
+    #Parent = [k[0] for k in LED_Pipes]
 
     #Front, Bottom, Inner, Top
     #Name, Pin, Number of LEDs
-    LED_Strips = [  LED_Strip('Front',      LED_Pipes[0][1], UPDATE_Pipes[0][1], D18, 120), #pin 12 GPIO 18
-                    LED_Strip('Inner',      LED_Pipes[1][1], UPDATE_Pipes[1][1], D21, 108), #pin 40 GPIO 21
-                    LED_Strip('Top/Bottom', LED_Pipes[2][1], UPDATE_Pipes[2][1], D12, 104)] #pin 32 GPIO 12
-    Update_LED([k[0] for k in UPDATE_Pipes], LED_Strips)
+    #LED_Strips = [  LED_Strip('Front',      LED_Pipes[0][1], UPDATE_Pipes[0][1], D18, 120), #pin 12 GPIO 18
+    #                LED_Strip('Inner',      LED_Pipes[1][1], UPDATE_Pipes[1][1], D21, 108), #pin 40 GPIO 21
+    #                LED_Strip('Top/Bottom', LED_Pipes[2][1], UPDATE_Pipes[2][1], D12, 104)] #pin 32 GPIO 12
+    #Update_LED([k[0] for k in UPDATE_Pipes], LED_Strips)
     
-    Points = []
-    Points.append([15, [-15,16], [-15,15], [-15,15], [-15,15]])
-    Points.append([13, [-13,14], [-13,13], [-13,13], [-13,13]])
-    Points.append([14, [-14,15], [-13,13], [-14,14], [-13,13]])
-    for i in range(len(LED_Strips)):
-        LED_Strips[i].start()
-        Parent[i].send(Points[i])
+    LED_Strips = [  LED_Strip('Front',       D18, 120), #pin 12 GPIO 18
+                    LED_Strip('Inner',       D21, 108), #pin 40 GPIO 21
+                    LED_Strip('Top/Bottom',  D12, 104)] #pin 32 GPIO 12
     
+
+    #Points = []
+    #Points.append([15, [-15,16], [-15,15], [-15,15], [-15,15]])
+    #Points.append([13, [-13,14], [-13,13], [-13,13], [-13,13]])
+    #Points.append([14, [-14,15], [-13,13], [-14,14], [-13,13]])
+    #for i in range(len(LED_Strips)):
+    #    LED_Strips[i].start()
+    #    Parent[i].send(Points[i])
+    
+    LED_Strips[0].Setup_Virtual_Points(15, [-15,16], [-15,15], [-15,15], [-15,15])
+    LED_Strips[1].Setup_Virtual_Points(13, [-13,14], [-13,13], [-13,13], [-13,13])
+    LED_Strips[2].Setup_Virtual_Points(14, [-14,15], [-13,13], [-14,14], [-13,13])
+    
+
     #for p in Parent:
     #    Recieve = p.recv()
 
@@ -225,8 +278,19 @@ if __name__ == "__main__":
         TODO!!!
         '''
 
-        for p in Parent:
-                p.send([angle_x, angle_y, angle_z, data[3]])
+        with Pool() as pool:
+            Array = [[angle_x, angle_y, angle_z, data[3], LED_Strips[0].cube_points],
+                     [angle_x, angle_y, angle_z, data[3], LED_Strips[1].cube_points],
+                     [angle_x, angle_y, angle_z, data[3], LED_Strips[2].cube_points],]
+            Colorss = pool.map(RotationOfPointsStandAlone, Array)
+            for i, Colors in enumerate(Colorss):
+                LED_Strips[i].UpdatePixels(Colors)
+
+        #for p in Parent:
+        #        p.send([angle_x, angle_y, angle_z, data[3]])
+
+        #for LED_Strip in LED_Strips:
+        #    LED_Strip.RotationOfPoints(angle_x, angle_y, angle_z, data[3])
 
         #for p in Parent:
             #p.send(True)
